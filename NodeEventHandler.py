@@ -3,6 +3,7 @@ import socket
 import select
 import threading
 import queue
+import json
 from typing import Tuple, List, Any, Dict
 from scapy.all import IP, ICMP, sr1
 
@@ -21,7 +22,7 @@ class ClusterManager:
         self.logger = self.setting.get_logger()
 
         # Экземляр класса обработчика отправок
-        self.event_sender = EventSender(self.nodes, self.logger)
+        self.event_sender = EventSender(self.nodes, self.logger, self.setup_nodes)
 
 
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -34,7 +35,24 @@ class ClusterManager:
         try:
             client_socket, _ = server_socket.accept()
             data = client_socket.recv(1024)
-            self.logger.info(f"Heartbeat received from {client_socket.getpeername()}")
+            
+            # Декодирование данных из байтов в строку
+            data_str = data.decode()
+
+            # Если данные ожидаются в формате JSON
+            heartbeat_data = json.loads(data_str)
+            if heartbeat_data["REG"] and heartbeat_data["REG"] == "12345":
+                host_id = heartbeat_data["REG"]
+                print(f"{host_id}")
+
+                # Отправка ответного пакета
+                ack_data = {"ACK": "12345"}
+                self.event_sender.send_event_for_node(client_socket.getpeername()[0], client_socket.getpeername()[1], ack_data, host_id)
+            
+                
+            # Обработка данных
+            self.logger.info(f"Heartbeat received from {client_socket.getpeername()}: {heartbeat_data}")
+
             client_socket.close()
         except Exception as e:
             self.logger.error(f"Error receiving heartbeat: {e}")
@@ -66,57 +84,47 @@ class ClusterManager:
 
 class EventSender:
     """docstring for ClassName"""
-    def __init__(self, nodes, logger):
+    def __init__(self, nodes, logger, setup_nodes):
         self.nodes = nodes
         self.logger = logger
+        self.setup_nodes = setup_nodes
 
-
-    def node_registration(self, new_node_data: Dict[str, Any]):
-
-    	# Получение адреса и порта новой ноды
-        self.new_node_host = new_node_data.host
-        self.new_node_port = new_node_data.port
-
+    def send_event_for_node(self, host: str, port: int, data, host_id: str) -> None:
 
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(5)
-                s.connect((self.new_node_host, int(self.new_node_port)))
-                s.sendall(b"Registration")
-                self.logger.info(f"[EventSender][send_Registration][{new_node_data.id}] Registration sent!")
+                s.connect((host, int(port)))
+                # Создайте словарь данных для отправки
+                # Преобразуйте словарь в JSON-строку
+                json_data = json.dumps(data)
+                # Преобразуйте JSON-строку в байты
+                bytes_data = json_data.encode()
+                # Отправьте байты через сокет
+                s.sendall(bytes_data)
+            updated_values = {"active": "Registration"}
+            self.setup_nodes.update_node_by_id(host_id, updated_values)
+            self.logger.info(f"[EventSender][send_Registration][{host_id}] Event sent!")
         except ConnectionRefusedError as e:
-            self.logger.error(f"[EventSender][send_Registration][{new_node_data.id}] Registration - Connection refused!")
+            self.logger.error(f"[EventSender][send_Registration][{host_id}] Registration - Connection refused!")
         except socket.timeout:
-            self.logger.error(f"[EventSender][send_Registration][{new_node_data.id}] Registration - Connection timeout!")
+            self.logger.error(f"[EventSender][send_Registration][{host_id}] Registration - Connection timeout!")
         except Exception as e:
-            self.logger.error(f"[EventSender][send_heartbeat] Error sending heartbeat to node {new_node_data.id}: {e}")
+            self.logger.error(f"[EventSender][send_heartbeat] Error sending heartbeat to node {host_id}: {e}")
     	
 
     def status_node_check(self, nodes):
         self.nodes = nodes
         for node in self.nodes:
             if node.active == "unknown":
-                heartbeat_thread = threading.Thread(target=self.node_registration, args=(node,))
+                data = {"REG": "12345"}
+                heartbeat_thread = threading.Thread(target=self.send_event_for_node, args=(node.host, node.port, data, node.id))
                 heartbeat_thread.start()
                 heartbeat_thread.join()
 
             elif node.active == "active":
-                heartbeat_thread = threading.Thread(target=self.send_heartbeat, args=(node,))
+                data = {"BIT": "12345"}
+                heartbeat_thread = threading.Thread(target=self.send_event_for_node, args=(node.host, node.port, data, node.id))
                 heartbeat_thread.start()
                 heartbeat_thread.join()
 
-
-    def send_heartbeat(self, node):
-        
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(5)
-                s.connect((node.host, int(node.port)))
-                s.sendall(b"Heartbeat")
-                self.logger.info(f"[EventSender][send_heartbeat][{node.id}] Heartbeat sent!")
-        except ConnectionRefusedError as e:
-            self.logger.error(f"[EventSender][send_heartbeat][{node.id}] Heartbeat - Connection refused!")
-        except socket.timeout:
-            self.logger.error(f"[EventSender][send_heartbeat][{node.id}] Heartbeat - Connection timeout!")
-        except Exception as e:
-            self.logger.error(f"[EventSender][send_heartbeat] Error sending heartbeat to node {node.id}: {e}")
