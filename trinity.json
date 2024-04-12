@@ -1,0 +1,21 @@
+{
+    "nodes": [
+        {
+            "id": "227387dc-7348-4dd9-8904-7a3a4db6f141",
+            "host": "192.168.16.226",
+            "port": 333,
+            "type": "neighbour",
+            "active": "unknown",
+            "route": ""
+        },
+        {
+            "id": "227387dc",
+            "host": "192.168.16.226",
+            "port": 333,
+            "type": "neighbour",
+            "active": "unknown",
+            "route": ""
+        }
+
+    ]
+}
