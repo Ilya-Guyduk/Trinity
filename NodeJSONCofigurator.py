@@ -59,7 +59,13 @@ class JSONFileManager:
         nodes = config_data.get("nodes", [])
         return next((node for node in nodes if node.get("id") == node_id), None)
 
-
+    def just_load_json(self, data_type):
+        try:
+            config_data = self._load_config()
+            return 0, config_data.get(data_type, "")
+        except Exception as e:
+            error_text = f"Error loading configuration: {e}"
+            return 1, error_text
 
     def load_json_nodes_config(self, data_type) -> Tuple[int, List[ClusterNode]]:
         try:

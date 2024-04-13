@@ -31,6 +31,7 @@ class ClusterManager:
             
     
     def receive_heartbeat(self, server_socket):
+        heartbeat_data = None  # Здесь инициализируем переменную
         try:
             client_socket, _ = server_socket.accept()
             data = client_socket.recv(1024)
@@ -42,20 +43,41 @@ class ClusterManager:
         except Exception as e:
             self.logger.error(f"Error receiving heartbeat: {e}")
 
-        if heartbeat_data["REG"] and heartbeat_data["REG"] == "12345":
-            host_id = heartbeat_data["REG"]
-            print(f"{host_id}")
+        if "REG" in heartbeat_data:  # Проверяем, определена ли переменная и содержит ли она нужное значение
+            reg_data = heartbeat_data["REG"]
+            print(f"{reg_data}")
+            for item in reg_data:
+                self.remote_host = item['host']
+                self.remote_port = item['port']
+                self.remote_id = item["id"]
 
+            print(f"{self.remote_host}")
+            print(f"{self.remote_port}")
             # Отправка ответного пакета
-            ack_data = {"ACK": "12345"}
-            print(f"ack_data = {ack_data}")
-            self.event_sender.send_event_for_node(client_socket.getpeername()[0], client_socket.getpeername()[1], ack_data, host_id)
-            
+            self.ret_code, self.self_node = self.setup_nodes.just_load_json("nodes")
+            data = {"ACK": self.self_node[0]}
+            print(f"ack_data = {data}")
+            self.event_sender.send_event_for_node(self.remote_host, self.remote_port, data, self.remote_id)
                 
             # Обработка данных
             self.logger.info(f"Heartbeat received from {client_socket.getpeername()}: {heartbeat_data}")
 
-            client_socket.close()
+
+        if "ACK" in heartbeat_data:
+            ack_data = heartbeat_data["ACK"]
+            
+            self.remote_host = ack_data['host']
+            self.remote_port = ack_data['port']
+            self.remote_id = ack_data["id"]
+            event_result = self.setup_nodes.add_node_to_config(ack_data)
+            if event_result == 0:
+                
+                self.logger.info(f" Created new host with ID {self.remote_id}, IP {self.remote_host}, Port {self.remote_port}")
+            else:
+                self.logger.error(f" Error created new host with ID {self.remote_id}, IP {self.remote_host}, Port {self.remote_port}")
+
+
+        client_socket.close()
         
     
     def run(self) -> None:
@@ -111,14 +133,15 @@ class EventSender:
         except socket.timeout:
             self.logger.error(f"[EventSender][send_Registration][{host_id}] Registration - Connection timeout!")
         except Exception as e:
-            self.logger.error(f"[EventSender][send_heartbeat] Error sending heartbeat to node {host_id}: {e}")
+            self.logger.error(f"[EventSender][send_heartbeat] Error sending to node {host_id}: {e}")
     	
 
     def status_node_check(self, nodes):
         self.nodes = nodes
         for node in self.nodes:
             if node.active == "unknown":
-                data = {"REG": "12345"}
+                self.ret_code, self.self_node = self.setup_nodes.just_load_json("self")
+                data = {"REG": self.self_node}
                 heartbeat_thread = threading.Thread(target=self.send_event_for_node, args=(node.host, node.port, data, node.id))
                 heartbeat_thread.start()
                 heartbeat_thread.join()

@@ -1,20 +1,22 @@
 {
+    "self": [
+        {
+            "id": "7a3a4db6f141",
+            "host": "192.168.0.154",
+            "port": 9000,
+            "type": "neighbour",
+            "active": "unknown",
+            "route": ""
+        }
+    ],
     "nodes": [
         {
-            "id": "227387dc-7348-4dd9-8904-7a3a4db6f141",
+            "id": "227387dc",
             "host": "192.168.0.171",
             "port": 9000,
             "type": "neighbour",
             "active": "Registration",
             "route": ""
-        },
-        {
-            "id": "591b6a3d-c1b3-4b1b-820f-6dd7d86dc834",
-            "host": "192.168.0.99",
-            "port": 1234,
-            "type": "neighbour",
-            "active": "unknown",
-            "route": "591b6a3d-c1b3-4b1b-820f-6dd7d86dc834"
         }
     ]
 }
