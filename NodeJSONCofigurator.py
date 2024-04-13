@@ -4,6 +4,22 @@ import inspect
 import threading
 from typing import Tuple, List, Any, Dict
 
+class SelfInfo(object):
+    """docstring for SelfInfo"""
+    def __init__(self, id: str, host: str, port: int, type: str, active: str, route: str):
+        self.id = id
+        self.host = host
+        self.port = port
+        self.type = type
+        self.active = active
+        self.route = route
+
+    @staticmethod
+    def _build_data_self_node(config_data: dict[str, Any]) -> List['SelfInfo']:
+        nodes_data = config_data.get("self", [])
+        return [SelfInfo(**node_data) for node_data in nodes_data]
+
+
 class ClusterNode:
     def __init__(self, id: str, host: str, port: int, type: str, active: str, route: str):
         self.id = id
@@ -29,7 +45,7 @@ class JSONFileManager:
             with open(self.file_path, 'r') as config_file:
                 return json.load(config_file)
         except FileNotFoundError:
-            self.first_data = {"nodes": []}
+            self.first_data = {"self": [], "nodes": []}
             return self._write_config(self.first_data)
 
 
@@ -45,12 +61,14 @@ class JSONFileManager:
 
 
 
-    def load_json_nodes_config(self) -> Tuple[int, List[ClusterNode]]:
+    def load_json_nodes_config(self, data_type) -> Tuple[int, List[ClusterNode]]:
         try:
             config_data = self._load_config()
-            nodes = ClusterNode._build_data_node(config_data)
-            return 0, nodes
-
+            if data_type == "nodes":
+                result = ClusterNode._build_data_node(config_data)
+            elif data_type == "self":
+                result = SelfInfo._build_data_self_node(config_data)
+            return 0, result
         except Exception as e:
             error_text = f"Error loading configuration: {e}"
             return 1, error_text

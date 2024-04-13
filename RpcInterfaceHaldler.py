@@ -2,15 +2,15 @@ import inspect
 import uuid
 import re
 from xmlrpc.server import SimpleXMLRPCServer
+from datetime import datetime
 
 class Configurator:
-    def __init__(self, setting, logger, setup_nodes, event_queue):
-        self.event_queue = event_queue
+    def __init__(self, app_setting, logger, setup_nodes):
         self.logging = logger
         self.setup_nodes = setup_nodes
 
         self.nodes = []
-        self.config_data = setting
+        self.config_data = app_setting
 
 
     def add_node(self, com_id, *values):
@@ -62,10 +62,9 @@ class Configurator:
 
         event_result = self.setup_nodes.add_node_to_config(host_info)
         if event_result == 0:
-            event_data = {"event": "add_node", "data": host_info}
-            self.event_queue.put_event(event_data)
+            
             self.logging.info(f"{log_prefix} Created new host with ID {self.host_id}, IP {values[0]}, Port {values[1]}")
-            return f"{host_info}"
+            return [host_info]
         else:
             self.logging.error(f"{log_prefix} Error created new host with ID {self.host_id}, IP {values[0]}, Port {values[1]}")
             return f"Error adding node to configuration. \n{host_info}"
@@ -81,17 +80,22 @@ class Configurator:
 
         return result
 
+    def status(self, com_id, *values):
+        if len(values) >= 0:
+            result = self.setup_nodes.find_node_by_id()
+            return result
+        else:
+            result = self.setup_nodes.find_node_by_id(values)
+
 class RPCInterface:
 
     """
     Класс реализации RPC интерфейса демона
     """
-    def __init__(self, rpc_host: str, rpc_port: int, setting, setup_nodes, event_queue):
-        self.setting = setting
-        self.logger = self.setting.get_logger()
-
-        self.setup_nodes = setup_nodes
-
+    def __init__(self, rpc_host: str, rpc_port: int, app_setting, setup_nodes):
+        #self.setup_nodes = setup_nodes
+        self.app_setting = app_setting
+        self.logger = self.app_setting.get_logger()
 
         self.class_name = self.__class__.__name__
         self.server = SimpleXMLRPCServer((rpc_host, rpc_port))
@@ -99,69 +103,67 @@ class RPCInterface:
         self.server.register_function(self.node)
         self.server.register_function(self.cluster)
         # Класс конфигуратора кластера
-        self.configurator = Configurator(setting, self.logger, self.setup_nodes, event_queue)
+        self.configurator = Configurator(app_setting, self.logger, setup_nodes)
 
     def _get_info_about_method(self):
 
         return inspect.currentframe().f_code.co_name
 
     def node(self, *args) -> str:
-
         # Получение имени метода для логирования
         self.method_name = self._get_info_about_method()
-
         # Уникальный идентификатор события 
         self.com_id = uuid.uuid4()
         # Префикс лога
         self.log_prefix = f"[{self.class_name} / {self.method_name}][{self.com_id}]"
-
         self.logger.debug(f"{self.log_prefix} New RPC command - {args}")
+        data = []
         # Проверка на наличие аргументов хоста
         if len(args) >= 1:
-            # Получаем метод из команды
             method = str(args[0])
             self.logger.debug(f"{self.log_prefix} RPC method - {method}")
+            method_functions = {
+                "add": self.configurator.add_node,
+                "del": self.configurator.delete_node,
+                "status": self.configurator.status
+            }
+            if method in method_functions:
+
+                func = method_functions[method]
+                args_to_pass = args[1:] if len(args) >= 2 else []
+                self.logger.info(f"{self.log_prefix} Trying {method} with args: {args_to_pass}")
+
+                data = func(self.com_id, *args_to_pass)
+                ret_code = 0
+                desc = "Ok!"
 
 
+            else:
+                self.logger.warning(f"{self.log_prefix} Unknown method: {method}")
+                ret_code = 2
+                desc = "Unknown method"
 
-
-            # метод добавления хоста
-            if method == "add":
-                self.logger.info(f"{self.log_prefix} Trying adding host with args: {args[1:]}")
-                result = self.configurator.add_node(self.com_id, *args[1:])
-
-            # метод изменения хоста
-            elif method == "mod":
-                self.logger.info(f"{self.log_prefix} Trying adding host...")
-                result = self.configurator.mod(self.com_id, *args[1:])
-
-            elif method == "del":
-                self.logger.info(f"{self.log_prefix} Trying adding host...")
-                result = self.configurator.delete_node(self.com_id, *args[1:])
-
-            elif method == "status":
-                if len(args) >= 2:
-                    self.logger.info(f"{self.log_prefix} Trying send stat with args: {args[1:]}")
-                    result = self.configurator.status(self.com_id, *args[1:])
-
-                else:
-                    self.logger.info(f"{self.log_prefix} Trying send stat")
-                    result = self.configurator.status(self.com_id)
-
-            self.logger.debug(f"{self.log_prefix} > method: {method}")
-            self.logger.debug(f"{self.log_prefix} Remaining commands: {args[1:]}")
 
         else:
             help_message = (
-            "Usage: node add [address] [port] ...\n"
-            "            del [address] ...\n"
-            "            mod [address] ...\n"
-            "            status [address] ...\n"
+                "node add [address] [port] ...\n"
+                "     del [address] ...\n"
+                "     mod [address] ...\n"
+                "     status [id] ...\n"
             )
+            self.logger.warning(f"[RPCInterface][{self.com_id}] Insufficient arguments provided")
+            ret_code = 2
+            desc = "Do you help?"
+            data = [{"Usage": help_message}]
 
-            self.logger.warning(f"[RPCInterface][{self.com_id}] Insufficient arguments provided - {method}")
-            result =  help_message
 
+
+
+
+        current_time = datetime.now()
+        formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
+        answer = {"retcode": ret_code, "desc": desc, "time": formatted_time, "event_id": str(self.com_id)}
+        result = {"answer": [answer], "data": data}
         return result
 
 

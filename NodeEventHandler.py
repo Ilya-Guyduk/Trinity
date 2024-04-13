@@ -29,33 +29,34 @@ class ClusterManager:
         self.server_socket.bind((tcp_host, tcp_port))
 
             
-
     
     def receive_heartbeat(self, server_socket):
         try:
             client_socket, _ = server_socket.accept()
             data = client_socket.recv(1024)
-            
             # Декодирование данных из байтов в строку
             data_str = data.decode()
-
             # Если данные ожидаются в формате JSON
             heartbeat_data = json.loads(data_str)
-            if heartbeat_data["REG"] and heartbeat_data["REG"] == "12345":
-                host_id = heartbeat_data["REG"]
-                print(f"{host_id}")
 
-                # Отправка ответного пакета
-                ack_data = {"ACK": "12345"}
-                self.event_sender.send_event_for_node(client_socket.getpeername()[0], client_socket.getpeername()[1], ack_data, host_id)
+        except Exception as e:
+            self.logger.error(f"Error receiving heartbeat: {e}")
+
+        if heartbeat_data["REG"] and heartbeat_data["REG"] == "12345":
+            host_id = heartbeat_data["REG"]
+            print(f"{host_id}")
+
+            # Отправка ответного пакета
+            ack_data = {"ACK": "12345"}
+            print(f"ack_data = {ack_data}")
+            self.event_sender.send_event_for_node(client_socket.getpeername()[0], client_socket.getpeername()[1], ack_data, host_id)
             
                 
             # Обработка данных
             self.logger.info(f"Heartbeat received from {client_socket.getpeername()}: {heartbeat_data}")
 
             client_socket.close()
-        except Exception as e:
-            self.logger.error(f"Error receiving heartbeat: {e}")
+        
     
     def run(self) -> None:
 
@@ -74,7 +75,7 @@ class ClusterManager:
                     self.receive_heartbeat(self.server_socket)
                 else:
                     pass  # Handle other inputs if any
-            self.ret_code, self.nodes = self.setup_nodes.load_json_nodes_config()
+            self.ret_code, self.nodes = self.setup_nodes.load_json_nodes_config("nodes")
             self.event_sender.status_node_check(self.nodes)
 
 

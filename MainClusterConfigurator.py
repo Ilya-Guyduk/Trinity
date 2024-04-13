@@ -89,13 +89,13 @@ class InitCluster:
 
         self.rpc_host = str(self.app_setting.get_config('RPCInterface', 'rpc_host'))
         self.rpc_port = int(self.app_setting.get_config('RPCInterface', 'rpc_port'))
-        #self.rpc_interface = RPCInterface(self.rpc_host, self.rpc_port, self.app_setting, self.setup_nodes)
+        self.rpc_interface = RPCInterface(self.rpc_host, self.rpc_port, self.app_setting, self.setup_nodes)
   
 
         cluster_manager_thread = threading.Thread(target=self.cluster_manager.run)
-        #rpc_interface_thread = threading.Thread(target=self.rpc_interface.run, args=(self.rpc_host, self.rpc_port))
+        rpc_interface_thread = threading.Thread(target=self.rpc_interface.run, args=(self.rpc_host, self.rpc_port))
 
-        #rpc_interface_thread.start()
+        rpc_interface_thread.start()
         cluster_manager_thread.start()
 
 
