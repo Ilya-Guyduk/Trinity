@@ -1,8 +1,8 @@
 import inspect
 import uuid
 import re
-from xmlrpc.server import SimpleXMLRPCServer
 from datetime import datetime
+import shortuuid
 
 class Configurator:
     def __init__(self, app_setting, logger, setup_nodes):
@@ -75,47 +75,99 @@ class Configurator:
         self.host_id = host_id
 
         # Удаление информации о ноде из JSON-файла
-        result = self.config_data.remove_node_from_config(self.host_id)
-        self.logging.info(f"[{self.class_name} / delete_node][{self.com_id}] Node with host ID {self.host_id} deleted from configuration.")
+        result = self.setup_nodes.remove_node_from_config(self.host_id)
+        self.logging.info(f"[Configurator / delete_node][{self.com_id}] Node with host ID {self.host_id} deleted from configuration.")
 
         return result
 
     def status(self, com_id, *values):
-        if len(values) >= 0:
-            result = self.setup_nodes.find_node_by_id()
+        if len(values) == 0:
+            print(f"{com_id} - {len(values)}")
+            ret_code, result = self.setup_nodes.find_node_by_id()
             return result
-        else:
+        elif len(values) >= 0:
+            print(len(values))
+            method = str(values[0])
+            self.logging.debug(f"{self.log_prefix} RPC status method - {method}")
+            
+            method_functions = {
+                "self": self.setup_nodes.find_node_by_id,
+            }
+            if method in method_functions:
+
+                func = method_functions[method]
+                args_to_pass = values[1:] if len(values) >= 2 else []
+                self.logger.info(f"{self.log_prefix} Trying {method} with args: {args_to_pass}")
+
+                data = func(*args_to_pass)
+                ret_code = 0
+                desc = "Ok!"
+
             result = self.setup_nodes.find_node_by_id(values)
 
-class RPCInterface:
 
-    """
-    Класс реализации RPC интерфейса демона
-    """
-    def __init__(self, rpc_host: str, rpc_port: int, app_setting, setup_nodes):
-        #self.setup_nodes = setup_nodes
+
+
+class RPCMethods:
+    def __init__(self, app_setting, setup_nodes):
         self.app_setting = app_setting
+        self.setup_nodes = setup_nodes
         self.logger = self.app_setting.get_logger()
 
-        self.class_name = self.__class__.__name__
-        self.server = SimpleXMLRPCServer((rpc_host, rpc_port))
-        # Регистрируем методы как удаленные процедуры
-        self.server.register_function(self.node)
-        self.server.register_function(self.cluster)
-        # Класс конфигуратора кластера
         self.configurator = Configurator(app_setting, self.logger, setup_nodes)
 
     def _get_info_about_method(self):
 
         return inspect.currentframe().f_code.co_name
 
+    def remote_registration(self, data):
+        if "REG" in data:  # Проверяем, определена ли переменная и содержит ли она нужное значение
+            reg_data = data["REG"]
+            print(f"reg_data - {reg_data}")
+            for item in reg_data:
+                self.remote_host = item['host']
+                self.remote_port = item['port']
+                self.remote_id = item["id"]
+
+            print(f"{self.remote_host}")
+            print(f"{self.remote_port}")
+            # Отправка ответного пакета
+            self.ret_code, self.self_node = self.setup_nodes.just_load_json("self")
+            data = {"ACK": self.self_node[0]}
+            print(f"ack_data = {data}")
+            return data
+                
+            # Обработка данных
+            self.logger.info(f"Heartbeat received: {data}")
+
+
+        if "ACK" in data:
+            ack_data = data["ACK"]
+            
+            self.remote_host = ack_data['host']
+            self.remote_port = ack_data['port']
+            self.remote_id = ack_data["id"]
+            event_result = self.setup_nodes.add_node_to_config(ack_data)
+            if event_result == 0:
+                
+                self.logger.info(f" Created new host with ID {self.remote_id}, IP {self.remote_host}, Port {self.remote_port}")
+            else:
+                self.logger.error(f" Error created new host with ID {self.remote_id}, IP {self.remote_host}, Port {self.remote_port}")
+
+
+
+    def ping(self) -> str:
+        return("Pong")
+
+
+
     def node(self, *args) -> str:
         # Получение имени метода для логирования
         self.method_name = self._get_info_about_method()
         # Уникальный идентификатор события 
-        self.com_id = uuid.uuid4()
+        self.com_id = shortuuid.uuid()
         # Префикс лога
-        self.log_prefix = f"[{self.class_name} / {self.method_name}][{self.com_id}]"
+        self.log_prefix = f"[RPCMethods / {self.method_name}][{self.com_id}]"
         self.logger.debug(f"{self.log_prefix} New RPC command - {args}")
         data = []
         # Проверка на наличие аргументов хоста
@@ -189,8 +241,3 @@ class RPCInterface:
             result =  help_message
 
         return result
-
-    def run(self, rpc_host, rpc_port):
-        self.logger.info(f"[RPCInterface] - RPC Interface listening on {rpc_host}:{rpc_port}")
-        self.server.serve_forever()
-        

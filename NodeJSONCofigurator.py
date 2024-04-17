@@ -4,15 +4,21 @@ import inspect
 import threading
 from typing import Tuple, List, Any, Dict
 
+from SelfParser import SelfController
+
 class SelfInfo(object):
     """docstring for SelfInfo"""
-    def __init__(self, id: str, host: str, port: int, type: str, active: str, route: str):
+    def __init__(self, id: str, host: str, port: int, type: str, active: str, hostname: str, memory: str, cpu: str, services: str):
         self.id = id
         self.host = host
         self.port = port
         self.type = type
         self.active = active
-        self.route = route
+        #self.route = route
+        self.hostname = hostname
+        self.memory = memory
+        self.cpu = cpu
+        self.services = services
 
     @staticmethod
     def _build_data_self_node(config_data: dict[str, Any]) -> List['SelfInfo']:
@@ -37,16 +43,19 @@ class ClusterNode:
 
 
 class JSONFileManager:
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str, app_setting):
         self.file_path = file_path
+        self.app_setting = app_setting
+        self.logger = self.app_setting.get_logger()
 
     def _load_config(self) -> Dict[str, Any]:
         try:
             with open(self.file_path, 'r') as config_file:
                 return json.load(config_file)
         except FileNotFoundError:
-            self.first_data = {"self": [], "nodes": []}
-            return self._write_config(self.first_data)
+            self.logger.debug("Starting init json file")
+            self.self_controller = SelfController(self.app_setting)
+            self.self_controller = self.self_controller.init_json_file()
 
 
     def _write_config(self, data: dict[str, Any]) -> None:
@@ -61,10 +70,9 @@ class JSONFileManager:
 
     def just_load_json(self, data_type):
         try:
-            config_data = self._load_config()
-            return 0, config_data.get(data_type, "")
+            return 0, self._load_config().get(data_type, [])
         except Exception as e:
-            error_text = f"Error loading configuration: {e}"
+            error_text = f"Error just loading configuration with key {data_type}: {e}"
             return 1, error_text
 
     def load_json_nodes_config(self, data_type) -> Tuple[int, List[ClusterNode]]:
@@ -74,6 +82,7 @@ class JSONFileManager:
                 result = ClusterNode._build_data_node(config_data)
             elif data_type == "self":
                 result = SelfInfo._build_data_self_node(config_data)
+                self.logger.debug("successfully load json config")
             return 0, result
         except Exception as e:
             error_text = f"Error loading configuration: {e}"
@@ -102,10 +111,10 @@ class JSONFileManager:
             logging.error(f"Error removing node from configuration: {e}")
 
 
-    def find_node_by_id(self, node_id=None):
+    def find_node_by_id(self, data_type="nodes", node_id=None):
         try:
             if node_id is None:
-                return self._load_config().get("nodes", [])
+                return self.just_load_json(data_type)
             else:
                 return self._get_node_by_id(node_id)
         except Exception as e:

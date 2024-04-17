@@ -2,15 +2,13 @@ import logging
 import threading
 import configparser
 import queue
-
+import asyncio
 # Модуль обработчика JSON конфига нод 
 from NodeJSONCofigurator import JSONFileManager
 # Модуль обработчика RPC интерфейса
-from RpcInterfaceHaldler import RPCInterface
-# Модуль обработчика событий кластера
-from NodeEventHandler import ClusterManager
-# Модуль обработчика очередей
-#from CoreQueueHandler import EventConfigQueue
+from CoreRpcInterfaceHandler import CoreRpc
+
+
 
 class AppSetting:
 
@@ -75,29 +73,16 @@ class InitCluster:
     	# Получение json файла из конфига
         self.json_node_config = self.app_setting.get_config('Nodes', 'json_file')
     	# Экземляр класса строителя нод JSONFileManager
-        self.setup_nodes = JSONFileManager(self.json_node_config)
-
-
+        self.setup_nodes = JSONFileManager(self.json_node_config, self.app_setting)
 
 
     def init_cluster_worker(self) -> None:
 
-
-        self.host = str(self.app_setting.get_config('Server', 'host'))
-        self.port = int(self.app_setting.get_config('Server', 'port'))
-        self.cluster_manager = ClusterManager(self.host, self.port, self.app_setting, self.setup_nodes)
-
         self.rpc_host = str(self.app_setting.get_config('RPCInterface', 'rpc_host'))
         self.rpc_port = int(self.app_setting.get_config('RPCInterface', 'rpc_port'))
-        self.rpc_interface = RPCInterface(self.rpc_host, self.rpc_port, self.app_setting, self.setup_nodes)
-  
-
-        cluster_manager_thread = threading.Thread(target=self.cluster_manager.run)
-        rpc_interface_thread = threading.Thread(target=self.rpc_interface.run, args=(self.rpc_host, self.rpc_port))
-
+        self.rpc_interface = CoreRpc(self.app_setting, self.setup_nodes)
+        rpc_interface_thread = threading.Thread(target=self.rpc_interface.run)
         rpc_interface_thread.start()
-        cluster_manager_thread.start()
-
 
 if __name__ == "__main__":
     main = InitCluster()

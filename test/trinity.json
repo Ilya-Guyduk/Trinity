@@ -1,0 +1,22 @@
+{
+    "self": [
+        {
+            "id": "7a3a4db6f141",
+            "host": "192.168.0.154",
+            "port": 9000,
+            "type": "neighbour",
+            "active": "unknown",
+            "route": ""
+        }
+    ],
+    "nodes": [
+        {
+            "id": "d12823da-d6e5-4984-a45f-b6363d7dc07b",
+            "host": "127.0.0.1",
+            "port": 5555,
+            "type": "neighbour",
+            "active": "active",
+            "route": "d12823da-d6e5-4984-a45f-b6363d7dc07b"
+        }
+    ]
+}
