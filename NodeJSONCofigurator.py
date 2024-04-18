@@ -27,13 +27,14 @@ class SelfInfo(object):
 
 
 class ClusterNode:
-    def __init__(self, id: str, host: str, port: int, type: str, active: str, route: str):
+    def __init__(self, id: str, host: str, port: int, route: str, type: str, active: str):
         self.id = id
         self.host = host
         self.port = port
         self.type = type
         self.active = active
         self.route = route
+
 
     @staticmethod
     def _build_data_node(config_data: dict[str, Any]) -> List['ClusterNode']:
@@ -53,7 +54,7 @@ class JSONFileManager:
             with open(self.file_path, 'r') as config_file:
                 return json.load(config_file)
         except FileNotFoundError:
-            self.logger.debug("Starting init json file")
+            self.logger.warning(f"[JSONFileManager]> '{self.app_setting.get_config('Nodes', 'json_file')}' doesnt not exist! Create new file!")
             self.self_controller = SelfController(self.app_setting)
             self.self_controller = self.self_controller.init_json_file()
 
@@ -82,7 +83,7 @@ class JSONFileManager:
                 result = ClusterNode._build_data_node(config_data)
             elif data_type == "self":
                 result = SelfInfo._build_data_self_node(config_data)
-                self.logger.debug("successfully load json config")
+                #self.logger.debug("successfully load json config")
             return 0, result
         except Exception as e:
             error_text = f"Error loading configuration: {e}"
@@ -107,8 +108,10 @@ class JSONFileManager:
             nodes[:] = [node for node in nodes if node.get("id") != node_id]
             self._write_config(config_data)
             logging.info(f"Node with id {node_id} removed from configuration successfully.")
+            return 0
         except Exception as e:
             logging.error(f"Error removing node from configuration: {e}")
+            return 1
 
 
     def find_node_by_id(self, data_type="nodes", node_id=None):

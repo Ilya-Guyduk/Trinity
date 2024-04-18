@@ -47,6 +47,8 @@ class AppSetting:
         console_handler.setFormatter(formatter)
         self.logger.addHandler(console_handler)
 
+        self.logger.debug("[AppSetting]> Initializing daemon settings...")
+
 
     	# Метод для получения значений из конфигурации
     def get_config(self, section: str, option: str) -> str:
@@ -77,12 +79,13 @@ class InitCluster:
 
 
     def init_cluster_worker(self) -> None:
-
+        self.logger.info("[InitCluster]> Initializing daemon...")
         self.rpc_host = str(self.app_setting.get_config('RPCInterface', 'rpc_host'))
         self.rpc_port = int(self.app_setting.get_config('RPCInterface', 'rpc_port'))
         self.rpc_interface = CoreRpc(self.app_setting, self.setup_nodes)
         rpc_interface_thread = threading.Thread(target=self.rpc_interface.run)
         rpc_interface_thread.start()
+        
 
 if __name__ == "__main__":
     main = InitCluster()

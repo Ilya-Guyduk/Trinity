@@ -20,8 +20,8 @@ class SelfController:
 	            service_name = line.split()[0]
 	            services.append(service_name)
 	        return services
-	    except subprocess.CalledProcessError:
-	        self.logger.error("Failed to get systemd services.")
+	    except subprocess.CalledProcessError as error:
+	        self.logger.error(f"Failed to get systemd services: {error}")
 	        return []
 
 
@@ -46,7 +46,7 @@ class SelfController:
 
 	def init_json_file(self):
 	    self.filename = self.app_setting.get_config('Nodes', 'json_file')
-	    self.logger.warning(f"{self.filename} doesnt not exist! Create new file!")
+	    self.logger.info(f"[SelfController]> Starting init json file")
 
 	    hostname, memory, cpu = self._get_system_info()
 	    services = self._get_services()

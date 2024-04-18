@@ -1,10 +1,10 @@
 {
     "self": [
         {
-            "id": "WeaLja6zJvPgW2qmAss5JV",
+            "id": "eAeryWzFJiSfX7Un3hQMgF",
             "hostname": "hostname",
             "memory": {
-                "total_physical_memory": 8248078336,
+                "total_physical_memory": 8248074240,
                 "total_swap_memory": 2147483648
             },
             "cpu": {
@@ -28,7 +28,7 @@
                     0
                 ],
                 "hz_actual": [
-                    2400008000,
+                    2400007000,
                     0
                 ],
                 "stepping": 13,
@@ -125,7 +125,7 @@
                 "l2_cache_associativity": 6
             },
             "host": "127.0.0.1",
-            "port": "5555",
+            "port": "6666",
             "type": "neighbour",
             "active": "alone",
             "services": []
@@ -133,12 +133,12 @@
     ],
     "nodes": [
         {
-            "id": "d8b1130d-d809-440e-8483-e4b1611426c7",
+            "id": "mWZaFsswTCE7Ygw4zNBYgN",
             "host": "127.0.0.1",
             "port": 5555,
             "type": "neighbour",
-            "active": "unknown",
-            "route": "d8b1130d-d809-440e-8483-e4b1611426c7"
+            "active": "active",
+            "route": ""
         }
     ],
     "cluster": []
