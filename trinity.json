@@ -131,15 +131,6 @@
             "services": []
         }
     ],
-    "nodes": [
-        {
-            "id": "mWZaFsswTCE7Ygw4zNBYgN",
-            "host": "127.0.0.1",
-            "port": 5555,
-            "type": "neighbour",
-            "active": "active",
-            "route": ""
-        }
-    ],
+    "nodes": [],
     "cluster": []
 }

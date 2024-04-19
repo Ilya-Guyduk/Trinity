@@ -66,7 +66,8 @@ class Configurator:
             return f"Error adding node to configuration. \n{host_info}"
 
 
-    def delete_node(self, com_id, host_id):
+    def delete_node(self, com_id, group, host_id):
+        self.group = group
         self.com_id = com_id
         self.host_id = host_id
 
@@ -79,21 +80,29 @@ class Configurator:
 
     def status(self, com_id, group, *values):
         self.group = group
-        print(f"len values {len(values)}")
-        if len(values) == 0:
-            ret_code, result = self.setup_nodes.find_node_by_id(self.group)
-            if int(ret_code) != 0:
-                self.logger.error(f"[Configurator/status]> {result}")
-                return result
-            else:
-                self.logger.debug(f"[Configurator/status]> result of command: {result}")
-                return result
+        self.com_id = com_id
+        if "full" in values:
+            format_data = "full"
+        else:
+            format_data = "partial"   
 
-        elif len(values) >= 0:
-            print(len(values))
+        self.logger.debug(f"[Configurator/status][{self.com_id}]> len - {len(values)}, values - {values}, group - {self.group}, format data - {format_data}")
+        
+        if len(values) == 0:
+            ret_code, result = self.setup_nodes.find_node_by_id(self.group, format_data)
+            if int(ret_code) != 0:
+                self.logger.error(f"[Configurator/status][{self.com_id}]> {result}")
+                #return result
+            #else:
+                #self.logger.debug(f"[Configurator/status][{self.com_id}]> result of {format_data} status: {result}")
+                #return result
+
+
+        elif len(values) > 0:
+
             method = str(values[0])
-            self.logger.debug(f"[Configurator/status]> RPC status method - {method}")
             
+
             method_functions = {
                 "self": self.setup_nodes.find_node_by_id,
             }
@@ -103,13 +112,15 @@ class Configurator:
                 args_to_pass = values[1:] if len(values) >= 2 else []
                 self.logger.info(f"[Configurator/status]> Trying {method} with args: {args_to_pass}")
 
-                data = func(*args_to_pass)
+                data = func(self.group, format_data, *args_to_pass)
                 ret_code = 0
                 desc = "Ok!"
 
             result = self.setup_nodes.find_node_by_id(values)
-            return result
+            #return result
 
+        self.logger.info(f"[Configurator/status][{self.com_id}]> res {self.group} status  - {result}")
+        return result
 
 
 
@@ -192,7 +203,7 @@ class RPCMethods:
                 "add": self.configurator.add_node,
                 "del": self.configurator.delete_node,
                 "status": self.configurator.status,
-                "del": self.configurator.modificate_node,
+                "mod": self.configurator.modificate_node,
             }
             if method in method_functions:
 
@@ -231,22 +242,23 @@ class RPCMethods:
 
     def node(self, *args) -> str:
         group = "nodes"
-        # Получение имени метода для логирования
-        self.method_name = self._get_info_about_method()
+
         # Уникальный идентификатор события 
         self.com_id = shortuuid.uuid()
         # Префикс лога
-        self.log_prefix = f"[RPCMethods/node][{self.com_id}]>"
-        self.logger.info(f"{self.log_prefix} New RPC command - {args}")
-        data = []
+        self.log_prefix = f"[RPCMethods/node_gateway][{self.com_id}]>"
+        self.logger.info(f"{self.log_prefix} New command for group {group} - {args}")
+
         # Проверка на наличие аргументов хоста
         if len(args) >= 1:
+
             method = str(args[0])
+
             method_functions = {
                 "add": self.configurator.add_node,
                 "del": self.configurator.delete_node,
                 "status": self.configurator.status,
-                "del": self.configurator.modificate_node,
+                "mod": self.configurator.modificate_node,
             }
             if method in method_functions:
 
@@ -272,7 +284,7 @@ class RPCMethods:
                 "     mod [address] ...\n"
                 "     status [id] ...\n"
             )
-            self.logger.warning(f"[RPCInterface][{self.com_id}] Insufficient arguments provided")
+            self.logger.info(f"[RPCInterface][{self.com_id}] Insufficient arguments for group {group} - {args}")
             ret_code = 2
             desc = "Do you help?"
             data = [{"Usage": help_message}]

@@ -69,12 +69,29 @@ class JSONFileManager:
         nodes = config_data.get("nodes", [])
         return next((node for node in nodes if node.get("id") == node_id), None)
 
-    def just_load_json(self, data_type):
+    def just_load_json(self, data_type="nodes", format_data="partial"):
         try:
-            return 0, self._load_config().get(data_type, [])
+            config = self._load_config().get(data_type, [])
+            self.logger.debug(f"[JSONFileManager][just_load_json] -> data_type - {data_type}, format_data - {format_data}, config - {config}")
+            
+            if format_data == "partial":
+                node_partial_data = {}
+                for node_data in config:  # Обходим каждый узел
+                    for key in ["id", "host", "port", "type", "active", "route"]:
+                        if key in node_data:  # Обращаемся к node_data, а не к config
+                            node_partial_data[key] = node_data[key]  # Сохраняем значения ключей текущего узла
+
+                print(node_partial_data)
+                return 0, node_partial_data
+            elif format_data == "full":
+                print(f"just_load_json ->[{format_data}] config {config}")
+                return 0, config
+            else:
+                return 1, "Invalid format_data parameter"
         except Exception as e:
             error_text = f"Error just loading configuration with key {data_type}: {e}"
             return 1, error_text
+
 
     def load_json_nodes_config(self, data_type) -> Tuple[int, List[ClusterNode]]:
         try:
@@ -114,10 +131,11 @@ class JSONFileManager:
             return 1
 
 
-    def find_node_by_id(self, data_type="nodes", node_id=None):
+    def find_node_by_id(self, data_type, format_data="partial", node_id=None):
+        self.logger.debug(f"[JSONFileManager][find_node_by_id] -> data_type - {data_type}, format_data - {format_data}, node_id - {node_id}")
         try:
             if node_id is None:
-                return self.just_load_json(data_type)
+                return self.just_load_json(data_type, format_data)
             else:
                 return self._get_node_by_id(node_id)
         except Exception as e:

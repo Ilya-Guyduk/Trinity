@@ -35,7 +35,7 @@ class AppSetting:
         self.logger.setLevel(self.log_level)
 
         # Формат логгера
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 
         # Создание обработчика для записи в файл
         file_handler = logging.FileHandler(self.log_file)
