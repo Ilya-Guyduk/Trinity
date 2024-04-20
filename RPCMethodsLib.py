@@ -16,11 +16,12 @@ class Configurator:
         pass
 
 
-    def add_node(self, com_id, *values):
+    def add_node(self, com_id, group, *values):
 
         """
         Метод добавления и валидации новой ноды
         """
+        self.group = group
         
         log_prefix = f"[Configurator /{inspect.currentframe().f_code.co_name}][{com_id}]>"
         # Регулярное выражение для валидации адреса
@@ -60,7 +61,7 @@ class Configurator:
         if event_result == 0:
             
             self.logger.info(f"{log_prefix} Created new host with ID {self.host_id}, DATA - {host_info}")
-            return [host_info]
+            return host_info
         else:
             self.logger.error(f"{log_prefix} Error created new host with ID {self.host_id}, DATA - {host_info}")
             return f"Error adding node to configuration. \n{host_info}"
@@ -137,49 +138,45 @@ class RPCMethods:
         return inspect.currentframe().f_code.co_name
 
     def remote_registration(self, data):
-
+        self.logger.debug(f"[RPCMethods][remote_registration]> data - {data}")
+        
         def convert_to_str(value):
-                if isinstance(value, dict):
-                    return {k: convert_to_str(v) for k, v in value.items()}
-                elif isinstance(value, list):
-                    return [convert_to_str(v) for v in value]
-                elif isinstance(value, int):
-                    return str(value)
-                else:
-                    return value
+            if isinstance(value, dict):
+                return {k: convert_to_str(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [convert_to_str(v) for v in value]
+            elif isinstance(value, int):
+                return str(value)
+            else:
+                return value
 
-        if "REG" in data:  # Проверяем, определена ли переменная и содержит ли она нужное значение
+        if "REG" in data:  
             reg_data = data["REG"]
-            print(f"reg_data - {reg_data}")
-            for item in reg_data:
-                self.remote_host = item['host']
-                self.remote_port = item['port']
-                self.remote_id = item["id"]
 
-            print(f"{self.remote_host}")
-            print(f"{self.remote_port}")
-            # Отправка ответного пакета
-            self.ret_code, self.self_node = self.setup_nodes.just_load_json("self")
-            data = {"ACK": self.self_node[0]}
-            print(f"ack_data = {data}")
-            return convert_to_str(data)
-                
-            # Обработка данных
-            self.logger.info(f"Heartbeat received: {data}")
-
-
-        if "ACK" in data:
-            ack_data = data["ACK"]
+            for key, value in reg_data.items():  
+                if key in ['host', 'port', 'id']:
+                    setattr(self, f"remote_{key}", value)
+                    self.logger.info(f"[RPCMethods][remote_registration]> self.remote_{key} - {value}")
             
-            self.remote_host = ack_data['host']
-            self.remote_port = ack_data['port']
-            self.remote_id = ack_data["id"]
-            event_result = self.setup_nodes.add_node_to_config(ack_data)
+            self.logger.debug(f"[RPCMethods][remote_registration]> reg_data - {reg_data}")
+
+            # Отправка ответного пакета
+            self.ret_code, self.self_node = self.setup_nodes.just_load_json("self", "full")
+            if self.ret_code == 0:
+                ack_data = {"ACK": self.self_node[0]}
+                self.logger.debug(f"[RPCMethods][remote_registration]> ack_data - {ack_data}")
+            else:
+                self.logger.error(f"[RPCMethods][just_load_json]> {self.self_node}")
+            
+            event_result = self.setup_nodes.add_node_to_config(convert_to_str(reg_data))
             if event_result == 0:
-                
                 self.logger.info(f" Created new host with ID {self.remote_id}, IP {self.remote_host}, Port {self.remote_port}")
             else:
                 self.logger.error(f" Error created new host with ID {self.remote_id}, IP {self.remote_host}, Port {self.remote_port}")
+
+            return convert_to_str(ack_data)
+        else:
+            return {"error": "No registration data found"}
 
 
 
@@ -188,6 +185,60 @@ class RPCMethods:
 
     def self_method(self, *args) -> str:
         group = "self"
+        # Получение имени метода для логирования
+        self.method_name = self._get_info_about_method()
+        # Уникальный идентификатор события 
+        self.com_id = shortuuid.uuid()
+        # Префикс лога
+        self.log_prefix = f"[RPCMethods/self][{self.com_id}]>"
+        self.logger.info(f"{self.log_prefix} New RPC command - {args}")
+        data = []
+        # Проверка на наличие аргументов хоста
+        if len(args) >= 1:
+            method = str(args[0])
+            method_functions = {
+                "add": self.configurator.add_node,
+                "del": self.configurator.delete_node,
+                "status": self.configurator.status,
+                "mod": self.configurator.modificate_node,
+            }
+            if method in method_functions:
+
+                func = method_functions[method]
+                args_to_pass = args[1:] if len(args) >= 2 else []
+                self.logger.debug(f"{self.log_prefix} Trying {method} with args: {args_to_pass}")
+
+                data = func(self.com_id, group, *args_to_pass)
+                ret_code = 0
+                desc = "Ok!"
+
+
+            else:
+                self.logger.warning(f"{self.log_prefix} Unknown method: {method}")
+                ret_code = 2
+                desc = "Unknown method"
+
+
+        else:
+            help_message = (
+                "self add [address] [port] ...\n"
+                "     del [address] ...\n"
+                "     mod [address] ...\n"
+                "     status [id] ...\n"
+            )
+            self.logger.warning(f"[RPCInterface][{self.com_id}] Insufficient arguments provided")
+            ret_code = 2
+            desc = "Do you help?"
+            data = [{"Usage": help_message}]
+
+        current_time = datetime.now()
+        formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
+        answer = {"retcode": ret_code, "desc": desc, "time": formatted_time, "event_id": str(self.com_id)}
+        result = {"answer": [answer], "data": data}
+        return result
+
+    def service_method(self, *args) -> str:
+        group = "service"
         # Получение имени метода для логирования
         self.method_name = self._get_info_about_method()
         # Уникальный идентификатор события 
@@ -287,7 +338,7 @@ class RPCMethods:
             self.logger.info(f"[RPCInterface][{self.com_id}] Insufficient arguments for group {group} - {args}")
             ret_code = 2
             desc = "Do you help?"
-            data = [{"Usage": help_message}]
+            data = {"Usage": help_message}
 
 
         current_time = datetime.now()

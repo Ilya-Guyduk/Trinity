@@ -18,18 +18,18 @@ class RpcScheduler:
         
 
     def loop_handler(self):
-        self.logger.debug("[RpcScheduler]> Starting RPC loop handler...")
+        self.logger.debug("[RpcScheduler][loop_handler]> Starting RPC loop handler...")
         while True:
             node_ret_code, nodes = self.setup_nodes.load_json_nodes_config("nodes")
             if int(node_ret_code) != 0:
-                self.logger.error(f"[RpcScheduler]> Error load_json_nodes_config: {nodes}")
+                self.logger.error(f"[RpcScheduler][loop_handler]>{nodes}")
                 break
             self.status_node_check(nodes)
             time.sleep(2)
 
 
     def send_reg_for_node(self, host: str, port: int, data, host_id: str) -> None:
-        self.logger.info(f"[EventSender][send_Ping][{host_id}]> Registration Event sent!")
+        self.logger.info(f"[EventSender][send_Registration][{host_id}]> Registration Event sent!")
         try:
             # Функция для преобразования чисел в строки во всей структуре данных
             def convert_to_str(value):
@@ -44,37 +44,39 @@ class RpcScheduler:
 
             # Преобразование всех чисел в строки в переменной data
             data_str = convert_to_str(data)
-            self.logger.debug(f"data - {data_str}")
+            self.logger.debug(f"[EventSender][convert_to_str]> data_str - {data_str}")
             proxy = xmlrpc.client.ServerProxy(f'http://{host}:{port}')
             res = proxy.remote_registration(data_str)
-            self.setup_nodes.update_node_by_id(host_id, {"active": "Registration"})
+            self.logger.info(f"[EventSender][send_reg_for_node][{host_id}]> ANSWER: {res}")
+            self.setup_nodes.update_node_by_id(host_id, {"active": "registration"})
 
             if "ACK" in res:
                 reg_data = res["ACK"]
+                self.setup_nodes.remove_node_from_config(host_id)
                 self.setup_nodes.add_node_to_config(reg_data)
                 self.logger.info(f"[EventSender][send_Registration][{host_id}]> Registration Event response!")
+                self.setup_nodes.update_node_by_id(host_id, {"active": "active"})
         except ConnectionRefusedError:
             self.logger.error(f"[EventSender][send_Registration][{host_id}] Registration - Connection refused!")
             time.sleep(5)
         except Exception as e:
-            self.logger.error(f"[EventSender][send_heartbeat] Error sending Registration to node {host_id}: {e}")
-            time.sleep(5)
+            self.logger.error(f"[EventSender][send_Registration] Error sending Registration to node {host_id}: {e}")
+            time.sleep(7)
 
     def send_ping_for_node(self, host: str, port: int, host_id: str) -> None:
         self.logger.info(f"[EventSender][send_Ping][{host_id}]> Ping Event sent!")
         try:
             proxy = xmlrpc.client.ServerProxy(f'http://{host}:{port}')
             res = proxy.ping()
-
-            if res == "pong":
-                reg_data = res["ACK"]
-                self.setup_nodes.add_node_to_config(reg_data)
+            if res == "Pong":
                 self.logger.info(f"[EventSender][send_Ping][{host_id}]> Ping Event response!")
         except ConnectionRefusedError:
             self.logger.error(f"[EventSender][send_Ping][{host_id}] Ping - Connection refused!")
+            self.setup_nodes.update_node_by_id(host_id, {"active": "Connection refused"})
             time.sleep(5)
         except Exception as e:
             self.logger.error(f"[EventSender][send_Ping] Error sending Ping to node {host_id}: {e}")
+            self.setup_nodes.update_node_by_id(host_id, {"active": "down"})
             time.sleep(10)
 
 
@@ -83,12 +85,12 @@ class RpcScheduler:
        
         for node in nodes:
             node_route = node.route
-            
             if node.active == "unknown":
-                self_ret_code, self.self_data = self.setup_nodes.just_load_json("self")
-                if int(self_ret_code) != 0:
+                self.ret_code, self.self_data = self.setup_nodes.just_load_json("self", "full")
+                if int(self.ret_code) != 0:
                     self.logger.error(f"[RpcScheduler]> Error load_json_nodes_config: {self.self_data}")    
-                data = {"REG": self.self_data}
+                data = {"REG": self.self_data[0]}
+                self.logger.info(f"[EventSender][status_node_check][{node.id}]> The registration process has begun!")
                 heartbeat_thread = threading.Thread(target=self.send_reg_for_node, args=(node.host, node.port, data, node.id))
                 heartbeat_thread.start()
                 heartbeat_thread.join()
@@ -100,6 +102,8 @@ class RpcScheduler:
 
             elif node.active == "disable":
                 pass
+            else:
+                self.logger.warning(f"[EventSender][status_node_check][{node.id}]> Unknown 'active' parameter: {node.active}!")
 
 
 
@@ -127,7 +131,7 @@ class RPCInterface:
         self.server.register_instance(rpc_methods)
 
     def run(self):
-        self.logger.info(f"[RPCInterface]> RPC Interface listening on {self.rpc_host}:{self.rpc_port}")
+        self.logger.info(f"[RPCInterface][run]> RPC Interface listening on {self.rpc_host}:{self.rpc_port}")
         self.server.serve_forever()
 
 
@@ -145,7 +149,6 @@ class CoreRpc:
         
 
     def run(self):
-
 
         self.rpc_scheduler = RpcScheduler(self.app_setting, self.setup_nodes)
         self.rpc_listener = RPCInterface(self.rpc_host, self.rpc_port, self.app_setting, self.setup_nodes)

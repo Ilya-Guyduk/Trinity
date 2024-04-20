@@ -14,7 +14,6 @@ class SelfInfo(object):
         self.port = port
         self.type = type
         self.active = active
-        #self.route = route
         self.hostname = hostname
         self.memory = memory
         self.cpu = cpu
@@ -27,12 +26,16 @@ class SelfInfo(object):
 
 
 class ClusterNode:
-    def __init__(self, id: str, host: str, port: int, route: str, type: str, active: str):
+    def __init__(self, id: str, host: str, port: int, type: str, active: str, route=[], hostname=None, memory=None, cpu=None, services=[]):
         self.id = id
         self.host = host
         self.port = port
         self.type = type
         self.active = active
+        self.hostname = hostname
+        self.memory = memory
+        self.cpu = cpu
+        self.services = services
         self.route = route
 
 
@@ -54,7 +57,7 @@ class JSONFileManager:
             with open(self.file_path, 'r') as config_file:
                 return json.load(config_file)
         except FileNotFoundError:
-            self.logger.warning(f"[JSONFileManager]> '{self.app_setting.get_config('Nodes', 'json_file')}' doesnt not exist! Create new file!")
+            self.logger.warning(f"[JSONFileManager][_load_config]> '{self.app_setting.get_config('Nodes', 'json_file')}' doesnt not exist! Create new file!")
             self.self_controller = SelfController(self.app_setting)
             self.self_controller = self.self_controller.init_json_file()
 
@@ -69,29 +72,29 @@ class JSONFileManager:
         nodes = config_data.get("nodes", [])
         return next((node for node in nodes if node.get("id") == node_id), None)
 
-    def just_load_json(self, data_type="nodes", format_data="partial"):
+    def just_load_json(self, data_type="nodes", format_data="partial") -> Dict[int, str]:
         try:
-            config = self._load_config().get(data_type, [])
-            self.logger.debug(f"[JSONFileManager][just_load_json] -> data_type - {data_type}, format_data - {format_data}, config - {config}")
-            
+            config = self._load_config().get(data_type, {})
+            self.logger.debug(f"[JSONFileManager][just_load_json]> INPUT: data_type - {data_type}, format_data - {format_data}, config - {config}")
+            result = []
             if format_data == "partial":
-                node_partial_data = {}
-                for node_data in config:  # Обходим каждый узел
+                for node_data in config:
+                    node_partial_data = {}
                     for key in ["id", "host", "port", "type", "active", "route"]:
-                        if key in node_data:  # Обращаемся к node_data, а не к config
-                            node_partial_data[key] = node_data[key]  # Сохраняем значения ключей текущего узла
+                        if key in node_data:
+                            node_partial_data[key] = node_data[key]
+                    result.append(node_partial_data)
 
-                print(node_partial_data)
-                return 0, node_partial_data
+                self.logger.debug(f"[JSONFileManager][just_load_json]> OUTPUT: node_partial_data - {node_partial_data}")
+                return 0, result
             elif format_data == "full":
-                print(f"just_load_json ->[{format_data}] config {config}")
+                self.logger.debug(f"[JSONFileManager][just_load_json]> OUTPUT: config - {config}")
                 return 0, config
             else:
-                return 1, "Invalid format_data parameter"
+                return 1, "[JSONFileManager][just_load_json]> Invalid format_data parameter"
         except Exception as e:
-            error_text = f"Error just loading configuration with key {data_type}: {e}"
+            error_text = f"[JSONFileManager][just_load_json]> Error with key '{data_type}' '{format_data}': {e}"
             return 1, error_text
-
 
     def load_json_nodes_config(self, data_type) -> Tuple[int, List[ClusterNode]]:
         try:
@@ -103,7 +106,7 @@ class JSONFileManager:
                 #self.logger.debug("successfully load json config")
             return 0, result
         except Exception as e:
-            error_text = f"Error loading configuration: {e}"
+            error_text = f"[JSONFileManager][load_json_nodes_config]> Error loading configuration: {e}"
             return 1, error_text
 
 
@@ -139,7 +142,7 @@ class JSONFileManager:
             else:
                 return self._get_node_by_id(node_id)
         except Exception as e:
-            logging.error(f"Error finding node in configuration: {e}")
+            logging.error(f"[JSONFileManager][find_node_by_id]> Error finding node in configuration: {e}")
             return None
 
 

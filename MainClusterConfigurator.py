@@ -85,6 +85,7 @@ class InitCluster:
         self.rpc_interface = CoreRpc(self.app_setting, self.setup_nodes)
         rpc_interface_thread = threading.Thread(target=self.rpc_interface.run)
         rpc_interface_thread.start()
+        rpc_interface_thread.join()
         
 
 if __name__ == "__main__":
