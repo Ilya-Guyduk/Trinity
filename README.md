@@ -34,4 +34,4 @@ License
 Trinity is licensed under the MIT License.
 
 ## Contact
-For support, feedback, or inquiries, please contact us at email@example.com.
+
