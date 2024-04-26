@@ -8,7 +8,7 @@ from NodeJSONCofigurator import JSONFileManager
 # Модуль обработчика RPC интерфейса
 from CoreRpcInterfaceHandler import CoreRpc
 
-
+from CoreProxyHandler import CoreRroxy
 
 class AppSetting:
 
@@ -47,7 +47,7 @@ class AppSetting:
         console_handler.setFormatter(formatter)
         self.logger.addHandler(console_handler)
 
-        self.logger.debug("[AppSetting]> Initializing daemon settings...")
+        self.logger.debug("[AppSetting][setup_logging]> Initializing daemon settings...")
 
 
     	# Метод для получения значений из конфигурации
@@ -84,6 +84,11 @@ class InitCluster:
         self.rpc_port = int(self.app_setting.get_config('RPCInterface', 'rpc_port'))
         self.rpc_interface = CoreRpc(self.app_setting, self.setup_nodes)
         rpc_interface_thread = threading.Thread(target=self.rpc_interface.run)
+        rpc_interface_thread.start()
+        rpc_interface_thread.join()
+
+        self.rpc_interface = CoreRroxy(self.app_setting)
+        rpc_interface_thread = threading.Thread(target=self.rpc_interface.main)
         rpc_interface_thread.start()
         rpc_interface_thread.join()
         

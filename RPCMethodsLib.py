@@ -3,6 +3,16 @@ import shortuuid
 import re
 from datetime import datetime
 import shortuuid
+from typing import Optional, Tuple, Any, Dict, Union, List
+
+class RPCAuthorizationError(Exception):
+    """Исключение, возникающее при ошибке авторизации в RPC."""
+    
+    def __init__(self, message="Authorization failed"):
+        self.message = message
+        super().__init__(self.message)
+
+
 
 class Configurator:
     def __init__(self, app_setting, logger, setup_nodes):
@@ -117,7 +127,7 @@ class Configurator:
                 ret_code = 0
                 desc = "Ok!"
 
-            result = self.setup_nodes.find_node_by_id(values)
+            ret_code, result = self.setup_nodes.find_node_by_id(self.group, values[0])
             #return result
 
         self.logger.info(f"[Configurator/status][{self.com_id}]> res {self.group} status  - {result}")
@@ -133,9 +143,93 @@ class RPCMethods:
 
         self.configurator = Configurator(app_setting, self.logger, setup_nodes)
 
-    def _get_info_about_method(self):
+        # Словарь с методами
+        self.method_functions = {
+            "add": self.configurator.add_node,
+            "del": self.configurator.delete_node,
+            "status": self.configurator.status,
+            "mod": self.configurator.modificate_node,
+        }
 
+    def _internal_authorize(self, key_node: str, event_id: str) -> bool:
+        result = 0
+        # Получение ключа из конфигурации приложения
+        self.key = self.app_setting.get_config('RPCInterface', 'key')
+        self.logger.debug(f"[RPCInterface][_internal_authorize][{event_id}]> key_node:{key_node}, my_key:{self.key}")
+        # Проверка наличия ключа
+        if key_node is None:
+            result = 1
+
+        # Сравнение ключей с использованием Secure Compare
+        #if not hmac.compare_digest(key_node, self.key):
+        #    result =  False
+
+        if key_node != "1":
+            result = 1
+        
+        self.logger.debug(f"[RPCInterface][_internal_authorize][{event_id}]> result:{result}!")
+        return result
+
+    def _get_info_about_method(self):
         return inspect.currentframe().f_code.co_name
+
+
+
+    def _process_command(self, group, method, args):
+        if method in self.method_functions:
+            func = self.method_functions[method]
+            args_to_pass = args[1:] if len(args) >= 2 else []
+            self.logger.debug(f"[RPCMethods/{group}] Trying {method} with args: {args_to_pass}")
+            data = func(self.event_id, group, *args_to_pass)
+            ret_code = 0
+            desc = "Ok!"
+        else:
+            self.logger.warning(f"[RPCMethods/{group}] Unknown method: {method}")
+            ret_code = 2
+            desc = "Unknown method"
+            data = [{"method": method}]
+
+        return ret_code, desc, data
+
+
+
+    def _prepare_response(self, ret_code, desc, data):
+        current_time = datetime.now()
+        formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
+        answer = {"retcode": ret_code, "desc": desc, "time": formatted_time, "event_id": str(self.event_id)}
+        result = {"answer": [answer], "data": data}
+        return result
+
+    def ping(self):
+        return "Pong"
+
+
+    def authorize(self, key_node: str) -> str:
+        """
+        Метод для авторизации по ключу `key_node`.
+
+    Args:
+        key_node (str): Ключ узла для авторизации.
+        args: Дополнительные аргументы (если необходимо).
+
+    Returns:
+        str: Результат выполнения авторизации.
+        """
+        self.event_id = shortuuid.uuid()
+        self.log_prefix = f"[RPCMethods/authorize][{self.event_id}]>"
+        self.logger.info(f"{self.log_prefix} New authorization attempt - {key_node}")
+
+        # Проверка наличия ключа
+        if key_node == "1":
+            ret_code = 0
+            desc = "Authorization successful"
+            data = [{"key_node": key_node}]
+        else:
+            ret_code = 2
+            desc = "Authorization failed"
+            data = [{"error": "Invalid key_node"}]
+
+        return self._prepare_response(ret_code, desc, data)
 
     def remote_registration(self, data):
         self.logger.debug(f"[RPCMethods][remote_registration]> data - {data}")
@@ -180,154 +274,16 @@ class RPCMethods:
 
 
 
-    def ping(self) -> str:
-        return("Pong")
-
-    def self_method(self, *args) -> str:
-        group = "self"
-        # Получение имени метода для логирования
-        self.method_name = self._get_info_about_method()
-        # Уникальный идентификатор события 
-        self.com_id = shortuuid.uuid()
-        # Префикс лога
-        self.log_prefix = f"[RPCMethods/self][{self.com_id}]>"
-        self.logger.info(f"{self.log_prefix} New RPC command - {args}")
-        data = []
-        # Проверка на наличие аргументов хоста
-        if len(args) >= 1:
-            method = str(args[0])
-            method_functions = {
-                "add": self.configurator.add_node,
-                "del": self.configurator.delete_node,
-                "status": self.configurator.status,
-                "mod": self.configurator.modificate_node,
-            }
-            if method in method_functions:
-
-                func = method_functions[method]
-                args_to_pass = args[1:] if len(args) >= 2 else []
-                self.logger.debug(f"{self.log_prefix} Trying {method} with args: {args_to_pass}")
-
-                data = func(self.com_id, group, *args_to_pass)
-                ret_code = 0
-                desc = "Ok!"
-
-
-            else:
-                self.logger.warning(f"{self.log_prefix} Unknown method: {method}")
-                ret_code = 2
-                desc = "Unknown method"
-
-
-        else:
-            help_message = (
-                "self add [address] [port] ...\n"
-                "     del [address] ...\n"
-                "     mod [address] ...\n"
-                "     status [id] ...\n"
-            )
-            self.logger.warning(f"[RPCInterface][{self.com_id}] Insufficient arguments provided")
-            ret_code = 2
-            desc = "Do you help?"
-            data = [{"Usage": help_message}]
-
-        current_time = datetime.now()
-        formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
-        answer = {"retcode": ret_code, "desc": desc, "time": formatted_time, "event_id": str(self.com_id)}
-        result = {"answer": [answer], "data": data}
-        return result
-
-    def service_method(self, *args) -> str:
-        group = "service"
-        # Получение имени метода для логирования
-        self.method_name = self._get_info_about_method()
-        # Уникальный идентификатор события 
-        self.com_id = shortuuid.uuid()
-        # Префикс лога
-        self.log_prefix = f"[RPCMethods/self][{self.com_id}]>"
-        self.logger.info(f"{self.log_prefix} New RPC command - {args}")
-        data = []
-        # Проверка на наличие аргументов хоста
-        if len(args) >= 1:
-            method = str(args[0])
-            method_functions = {
-                "add": self.configurator.add_node,
-                "del": self.configurator.delete_node,
-                "status": self.configurator.status,
-                "mod": self.configurator.modificate_node,
-            }
-            if method in method_functions:
-
-                func = method_functions[method]
-                args_to_pass = args[1:] if len(args) >= 2 else []
-                self.logger.debug(f"{self.log_prefix} Trying {method} with args: {args_to_pass}")
-
-                data = func(self.com_id, group, *args_to_pass)
-                ret_code = 0
-                desc = "Ok!"
-
-
-            else:
-                self.logger.warning(f"{self.log_prefix} Unknown method: {method}")
-                ret_code = 2
-                desc = "Unknown method"
-
-
-        else:
-            help_message = (
-                "self add [address] [port] ...\n"
-                "     del [address] ...\n"
-                "     mod [address] ...\n"
-                "     status [id] ...\n"
-            )
-            self.logger.warning(f"[RPCInterface][{self.com_id}] Insufficient arguments provided")
-            ret_code = 2
-            desc = "Do you help?"
-            data = [{"Usage": help_message}]
-
-        current_time = datetime.now()
-        formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
-        answer = {"retcode": ret_code, "desc": desc, "time": formatted_time, "event_id": str(self.com_id)}
-        result = {"answer": [answer], "data": data}
-        return result
-
-    def node(self, *args) -> str:
+    def node(self, key_node, method, host, port, *args) -> str:
+        self.method = method
+        self.key_node = key_node
         group = "nodes"
+        self.event_id = shortuuid.uuid()
+        self.log_prefix = f"[RPCMethods/node_gateway][{self.event_id}]>"
+        self.logger.info(f"{self.log_prefix} New command for group {group}, method - {method}, - {args}")
 
-        # Уникальный идентификатор события 
-        self.com_id = shortuuid.uuid()
-        # Префикс лога
-        self.log_prefix = f"[RPCMethods/node_gateway][{self.com_id}]>"
-        self.logger.info(f"{self.log_prefix} New command for group {group} - {args}")
-
-        # Проверка на наличие аргументов хоста
         if len(args) >= 1:
-
-            method = str(args[0])
-
-            method_functions = {
-                "add": self.configurator.add_node,
-                "del": self.configurator.delete_node,
-                "status": self.configurator.status,
-                "mod": self.configurator.modificate_node,
-            }
-            if method in method_functions:
-
-                func = method_functions[method]
-                args_to_pass = args[1:] if len(args) >= 2 else []
-                self.logger.debug(f"{self.log_prefix} Trying {method} with args: {args_to_pass}")
-
-                data = func(self.com_id, group, *args_to_pass)
-                ret_code = 0
-                desc = "Ok!"
-
-
-            else:
-                self.logger.warning(f"{self.log_prefix} Unknown method: {method}")
-                ret_code = 2
-                desc = "Unknown method"
-
-
+            ret_code, desc, data = self._process_command(group, self.method, args)
         else:
             help_message = (
                 "node add [address] [port] ...\n"
@@ -335,68 +291,101 @@ class RPCMethods:
                 "     mod [address] ...\n"
                 "     status [id] ...\n"
             )
-            self.logger.info(f"[RPCInterface][{self.com_id}] Insufficient arguments for group {group} - {args}")
-            ret_code = 2
-            desc = "Do you help?"
-            data = {"Usage": help_message}
-
-
-        current_time = datetime.now()
-        formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
-        answer = {"retcode": ret_code, "desc": desc, "time": formatted_time, "event_id": str(self.com_id)}
-        result = {"answer": [answer], "data": data}
-        return result
-
-
-    def cluster(self, *args):
-        group = "cluster"
-        # Получение имени метода для логирования
-        self.method_name = self._get_info_about_method()
-        # Уникальный идентификатор события 
-        self.com_id = shortuuid.uuid()
-        # Префикс лога
-        self.log_prefix = f"[RPCMethods/node][{self.com_id}]>"
-        self.logger.info(f"{self.log_prefix} New RPC command - {args}")
-        data = []
-        # Проверка на наличие аргументов хоста
-        if len(args) >= 1:
-            method = str(args[0])
-            method_functions = {
-                "add": self.configurator.add_node,
-                "del": self.configurator.delete_node,
-                "status": self.configurator.status,
-                "del": self.configurator.modificate_node,
-            }
-            if method in method_functions:
-
-                func = method_functions[method]
-                args_to_pass = args[1:] if len(args) >= 2 else []
-                self.logger.debug(f"{self.log_prefix} Trying {method} with args: {args_to_pass}")
-
-                data = func(self.com_id, group, *args_to_pass)
-                ret_code = 0
-                desc = "Ok!"
-
-            else:
-                self.logger.warning(f"{self.log_prefix} Unknown method: {method}")
-                ret_code = 2
-                desc = "Unknown method"
-
-        else:
-            help_message = (
-                "node add [address] [port] ...\n"
-                "     del [address] ...\n"
-                "     mod [address] ...\n"
-                "     status [id] ...\n"
-            )
-            self.logger.warning(f"[RPCInterface][{self.com_id}] Insufficient arguments provided")
+            self.logger.info(f"[RPCInterface][{self.event_id}] Insufficient arguments for group {group} - {args}")
             ret_code = 2
             desc = "Do you help?"
             data = [{"Usage": help_message}]
 
+        return self._prepare_response(ret_code, desc, data)
 
-        current_time = datetime.now()
-        formatted_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
-        answer = {"retcode": ret_code, "desc": desc, "time": formatted_time, "event_id": str(self.com_id)}
-        result = {"answer": [answer], "data": data}
-        return result
+    def proxy_port_operation(self):
+        pass
+
+
+    def json_dossier_operation(self, operation: str, key_node: Optional[str] = None, group: str = "nodes", format_data: Union[str, List[str]] = "partial", node_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Gets data in JSON format from a dossier.
+
+        Args:
+            operation (str): The operation to be performed. Possible values: 'get', 'put', 'del'.
+            key_node (str, optional): Authorisation key. Defaults to None.
+            group (str, optional): Group of nodes. Defaults to 'nodes'. Possible values: 'nodes', 'self'.
+            format_data (str, optional): Data format. Default is 'partial'. Possible values: 'partial', 'full' or list of keys.
+            id (str, optional): Node identifier. Defaults to None.
+
+        Returns:
+            Dict[str, Any]: The prepared response in JSON format.
+
+        Raises:
+            RPCAuthorisationError: Authorisation error.
+            ValueError: An empty input argument was detected.
+            KeyError: Key not found.
+            TypeError: Incorrect type of input arguments.
+        """
+
+        # Initialize variables
+        return_code: int = None
+        description: str = None
+        response: str = None
+
+        # Generate unique event ID for logging
+        self.event_id: str = shortuuid.uuid()
+        self.log_prefix: str = f"[RPCInterface][json_dossier_operation][{self.event_id}]"
+        self.logger.debug(f"{self.log_prefix}> inc_cmd: operation:{operation}, key_node:{key_node}, group:{group}, format_data:{format_data}, host_id:{node_id}")
+        try:
+            # Check for empty input arguments
+            if not group.strip() or (isinstance(format_data, str) and not format_data.strip()) or (isinstance(format_data, list) and not all(isinstance(item, str) for item in format_data)):
+                raise ValueError("Empty input argument detected.")
+
+            # Check for invalid input types
+            if not isinstance(key_node, str) or not isinstance(group, str) or not (isinstance(format_data, str) or isinstance(format_data, list)):
+                raise TypeError("Invalid input type. Expected str.")
+
+            # Perform authorization
+            self.aut_res = self._internal_authorize(key_node, self.event_id)           
+            if self.aut_res == 1:
+                raise RPCAuthorizationError("Authorization failed.")
+            
+        except RPCAuthorizationError as error:
+
+            # Handle authorization error
+            self.logger.warning(f"{self.log_prefix}> Authorization error occurred: {error}")
+            return_code = 2
+            description = str(error)
+            response = 0
+
+        except (ValueError, KeyError, TypeError) as error:
+
+            # Handle custom errors
+            self.logger.warning(f"{self.log_prefix}> Custom error occurred: {error}")
+            return_code = 2
+            description = str(error)
+            response = 0
+
+        except Exception as ex:
+
+            # Handle unexpected errors
+            self.logger.error(f"{self.log_prefix}> An unexpected error occurred: {ex}")
+            return_code = 1
+            description = "An unexpected error occurred"
+            response = 0
+
+        else:
+
+            # Execute command and handle success
+            self.logger.info(f"{self.log_prefix}> Command execution {operation} {format_data} from {key_node} to {node_id}")
+
+            if operation == 'get':
+                return_code, response = self.setup_nodes.find_json_dossier(event_id=self.event_id, group=group, format_data=format_data, node_id=node_id)
+            elif operation == 'put':
+                return_code, response = self.setup_nodes.add_node_to_config(group=group, format_data=format_data, node_id=node_id)
+            elif operation == 'del':
+                return_code, response = self.setup_nodes.delete_node(event_id=self.event_id, group=group, node_id=node_id)
+            return_code = 0
+            description = "Ok!"
+        finally:
+
+            # Return processed response
+            return self._prepare_response(return_code, description, response)
+
+    

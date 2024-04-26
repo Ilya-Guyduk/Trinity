@@ -60,6 +60,8 @@ class JSONFileManager:
             self.logger.warning(f"[JSONFileManager][_load_config]> '{self.app_setting.get_config('Nodes', 'json_file')}' doesnt not exist! Create new file!")
             self.self_controller = SelfController(self.app_setting)
             self.self_controller = self.self_controller.init_json_file()
+        else:
+            self.logger.debug("[JSONFileManager][_load_config]> Load config dossier successfully!")
 
 
     def _write_config(self, data: dict[str, Any]) -> None:
@@ -72,14 +74,15 @@ class JSONFileManager:
         nodes = config_data.get("nodes", [])
         return next((node for node in nodes if node.get("id") == node_id), None)
 
-    def just_load_json(self, data_type="nodes", format_data="partial") -> Dict[int, str]:
+    def just_load_json(self, event_id, data_type="nodes", format_data="partial") -> Dict[int, str]:
         try:
-            config = self._load_config().get(data_type, {})
-            self.logger.debug(f"[JSONFileManager][just_load_json]> INPUT: data_type - {data_type}, format_data - {format_data}, config - {config}")
+            node_partial_data = {}
+            config = self._load_config().get(data_type, [])
+            self.logger.debug(f"[JSONFileManager][just_load_json][{event_id}]> INPUT: data_type - {data_type}, format_data - {format_data}, config - {config}")
             result = []
             if format_data == "partial":
                 for node_data in config:
-                    node_partial_data = {}
+                    
                     for key in ["id", "host", "port", "type", "active", "route"]:
                         if key in node_data:
                             node_partial_data[key] = node_data[key]
@@ -90,6 +93,14 @@ class JSONFileManager:
             elif format_data == "full":
                 self.logger.debug(f"[JSONFileManager][just_load_json]> OUTPUT: config - {config}")
                 return 0, config
+            elif isinstance(format_data, list):
+                for node_data in config:
+                    for key in list(format_data):
+                        if key in node_data:
+                            node_partial_data[key] = node_data[key]
+                    result.append(node_partial_data)
+                self.logger.debug(f"[JSONFileManager][just_load_json]> OUTPUT: node_custom_data - {node_partial_data}")
+                return 0, result
             else:
                 return 1, "[JSONFileManager][just_load_json]> Invalid format_data parameter"
         except Exception as e:
@@ -134,22 +145,22 @@ class JSONFileManager:
             return 1
 
 
-    def find_node_by_id(self, data_type, format_data="partial", node_id=None):
-        self.logger.debug(f"[JSONFileManager][find_node_by_id] -> data_type - {data_type}, format_data - {format_data}, node_id - {node_id}")
+    def find_json_dossier(self,event_id: str, group: str = "nodes", format_data="partial", node_id=None):
+        self.logger.debug(f"[JSONFileManager][find_json_dossier][{event_id}] -> group - {group}, format_data - {format_data}, node_id - {node_id}")
         try:
-            if node_id is None:
-                return self.just_load_json(data_type, format_data)
+            if not node_id or node_id is None:
+                return self.just_load_json(event_id, group, format_data)
             else:
-                return self._get_node_by_id(node_id)
+                return self._get_node_by_id(event_id, node_id)
         except Exception as e:
-            logging.error(f"[JSONFileManager][find_node_by_id]> Error finding node in configuration: {e}")
+            logging.error(f"[JSONFileManager][find_json_dossier][{event_id}]> Error finding node in configuration: {e}")
             return None
 
 
-    def update_node_by_id(self, node_id: str, updated_values):
+    def update_node_by_id(self, node_id: str, group="nodes", updated_values: Dict = []):
         try:
             config_data = self._load_config()
-            nodes = config_data.get("nodes", [])
+            nodes = config_data.get(group, [])
             for node in nodes:
                 if node.get("id") == node_id:
                     node.update(updated_values)
