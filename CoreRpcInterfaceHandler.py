@@ -18,7 +18,7 @@ class RPCInterface:
         self.app_setting = app_setting
         self.logger = self.app_setting.get_logger()
         self.setup_nodes = setup_nodes
-        self.server = SimpleXMLRPCServer((rpc_host, rpc_port), requestHandler=RequestHandler)
+        self.server = SimpleXMLRPCServer((rpc_host, rpc_port), requestHandler=RequestHandler, allow_none=False)
         
 
         # Создаем экземпляр RPCMethods

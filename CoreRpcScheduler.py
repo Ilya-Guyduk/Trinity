@@ -1,7 +1,7 @@
 import threading
 import time
 import xmlrpc.client
-
+import shortuuid
 
 class RpcScheduler:
     def __init__(self, app_setting: 'AppSetting', setup_nodes):
@@ -16,9 +16,9 @@ class RpcScheduler:
             node_ret_code, nodes = self.setup_nodes.load_json_nodes_config("nodes")
             if int(node_ret_code) != 0:
                 self.logger.error(f"[RpcScheduler][loop_handler]>{nodes}")
-                break
+                #break
             self.status_node_check(nodes)
-            time.sleep(2)
+            #time.sleep(1)
 
 
     def send_reg_for_node(self, host: str, port: int, data, host_id: str) -> None:
@@ -63,6 +63,7 @@ class RpcScheduler:
             res = proxy.ping()
             if res == "Pong":
                 self.logger.info(f"[EventSender][send_Ping][{host_id}]> Ping Event response!")
+            time.sleep(2)
         except ConnectionRefusedError:
             self.logger.error(f"[EventSender][send_Ping][{host_id}] Ping - Connection refused!")
             self.setup_nodes.update_node_by_id(host_id, {"active": "Connection refused"})
@@ -73,25 +74,73 @@ class RpcScheduler:
             time.sleep(10)
 
 
+    def synchronisation(self, host: str, port: int, host_id: str) -> None:
+        def convert_to_str(value):
+                if isinstance(value, dict):
+                    return {k: convert_to_str(v) for k, v in value.items()}
+                elif isinstance(value, list):
+                    return [convert_to_str(v) for v in value]
+                elif isinstance(value, int):
+                    return str(value)
+                else:
+                    return value
+        time.sleep(10)
+        self.logger.info(f"[EventSender][synchronisation][{host_id}]> Start synchronisation!")
+        try:
+
+            proxy = xmlrpc.client.ServerProxy(f'http://{host}:{port}')
+            data = self.setup_nodes._load_config()
+            data_str = convert_to_str(data)
+            res = proxy.synchronis(data_str)
+            if res == "Pong":
+                self.logger.info(f"[EventSender][send_Ping][{host_id}]> Sync Event response!")
+        except ConnectionRefusedError:
+            self.logger.error(f"[EventSender][send_Ping][{host_id}] Ping - Connection refused!")
+            self.setup_nodes.update_node_by_id(host_id, {"active": "Connection refused"})
+
+        except Exception as e:
+            self.logger.error(f"[EventSender][send_Ping] Error sending Ping to node {host_id}: {e}")
+            self.setup_nodes.update_node_by_id(host_id, {"active": "down"})
+
+
+
+
+
+
+
     def status_node_check(self, nodes):
         """Метод проверки статуса и маршрута хоста"""
        
         for node in nodes:
-            node_route = node.route
+            self.event_id: str = shortuuid.uuid()
+            #node_route = node.route
             if node.active == "unknown" or node.active == "registration":
-                self.ret_code, self.self_data = self.setup_nodes.just_load_json("self", "full")
+
+                self.logger.warning(f"[EventSender][status_node_check][{node.id}]> Node has status {node.active}!")
+                self.logger.info(f"[EventSender][status_node_check][{node.id}]> The registration process has begun!")
+                
+                self.ret_code, self.self_data = self.setup_nodes.just_load_json(self.event_id, "self", "full")
                 if int(self.ret_code) != 0:
                     self.logger.error(f"[RpcScheduler]> Error load_json_nodes_config: {self.self_data}")    
+                
                 data = {"REG": self.self_data[0]}
-                self.logger.info(f"[EventSender][status_node_check][{node.id}]> The registration process has begun!")
+                
                 heartbeat_thread = threading.Thread(target=self.send_reg_for_node, args=(node.host, node.port, data, node.id))
                 heartbeat_thread.start()
                 heartbeat_thread.join()
 
             elif node.active == "active" or node.active == "down" or node.active == "Connection refused":
+                #sync_thread = threading.Thread(target=self.synchronisation, args=(node.host, node.port, node.id))
+                #sync_thread.start()
+                #sync_thread.join()
+
                 heartbeat_thread = threading.Thread(target=self.send_ping_for_node, args=(node.host, node.port, node.id))
                 heartbeat_thread.start()
                 heartbeat_thread.join()
+
+                
+
+
 
             elif node.active == "disable":
                 pass
