@@ -2,9 +2,14 @@ import threading
 import time
 import xmlrpc.client
 import shortuuid
+import queue
+
+
+
 
 class RpcScheduler:
-    def __init__(self, app_setting: 'AppSetting', setup_nodes):
+    def __init__(self, app_setting: 'AppSetting', setup_nodes, event_queue):
+        self.event_queue = event_queue
         self.setup_nodes = setup_nodes
         self.app_setting = app_setting
         self.logger = self.app_setting.get_logger()
@@ -16,9 +21,18 @@ class RpcScheduler:
             node_ret_code, nodes = self.setup_nodes.load_json_nodes_config("nodes")
             if int(node_ret_code) != 0:
                 self.logger.error(f"[RpcScheduler][loop_handler]>{nodes}")
-                #break
+                break
+
             self.status_node_check(nodes)
-            #time.sleep(1)
+            
+            try:
+                # Извлечь событие из очереди без блокировки
+                event = self.event_queue.get_nowait()
+                # Обработать событие
+                print("Handling event:", event)
+            except queue.Empty:
+                # Если очередь пуста, продолжить выполнение основного цикла
+                pass
 
 
     def send_reg_for_node(self, host: str, port: int, data, host_id: str) -> None:
