@@ -281,7 +281,7 @@ class RPCMethods:
     def add_dossier(self, 
                     key_node: Optional[str] = None, 
                     group: str = "nodes", 
-                    data: Dict[str, Any] = {}) -> Dict[str, Any]:
+                    data: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Gets data in JSON format from a dossier.
 
@@ -306,8 +306,8 @@ class RPCMethods:
 
         # Generate unique event ID for logging
         self.event_id: str = shortuuid.uuid()
-        self.log_prefix: str = f"[RPCInterface][get_dossier][{self.event_id}]"
-        self.logger.debug(f"{self.log_prefix}> inc_get_cmd: key_node:{key_node}, group:{group}, data:{data}")
+        self.log_prefix: str = f"[RPCInterface][add_dossier][{self.event_id}]"
+        self.logger.debug(f"{self.log_prefix}> inc_add_cmd: key_node:{key_node}, group:{group}, data:{data}")
         try:
             # Check for empty input arguments
             if not group.strip():
