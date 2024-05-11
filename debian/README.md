@@ -1,2 +1,0 @@
-# Trinity
-Cluster service orchestrator
