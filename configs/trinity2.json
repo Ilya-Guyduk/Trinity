@@ -1,0 +1,29 @@
+{
+    "self": [
+        {
+            "id": "fWxtUivGoJHKjVin4iZuW8",
+            "hostname": "hostname",
+            "memory": "",
+            "cpu": "",
+            "host": "127.0.0.1",
+            "port": 6666,
+            "type": "neighbour",
+            "active": "alone",
+            "services": []
+        }
+    ],
+    "nodes": [
+        {
+            "id": "fWxtUivGoJHKjVin4iZuW8",
+            "hostname": "hostname",
+            "memory": "",
+            "cpu": "",
+            "host": "127.0.0.1",
+            "port": 6666,
+            "type": "neighbour",
+            "active": "alone",
+            "services": []
+        }
+    ],
+    "cluster": []
+}

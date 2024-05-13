@@ -37,8 +37,10 @@ func InitLogger(cfg *config.Config) error {
 
 	// Определение места вывода лога (файл и/или консоль).
 	var output io.Writer = file
+	var ScreenOut bool
 	if val, ok := cfg.Get("Logging", "ScreenOut"); ok && val == "True" {
 		output = io.MultiWriter(file, os.Stdout)
+		ScreenOut = true
 	}
 
 	// Получение уровня логирования из конфигурации.
@@ -66,13 +68,14 @@ func InitLogger(cfg *config.Config) error {
 		flag = log.Ldate | log.Ltime | log.Lshortfile
 		level = 4
 	default:
+		level = 2
 		flag = log.Ldate | log.Ltime
 		log.Printf("Unknown log level: '%s'. Using 'info'!", logLevel)
 	}
 
 	// Создание нового логгера с указанным местом вывода и флагами форматирования.
 	Logger = log.New(output, "", flag)
-	Logger.Printf("[LOGGER][init]Logger initialized successfully with setting:log_level - %s", logLevel)
+	Logger.Printf("[INIT]  [LOGGER][init]> Logger initialized successfully with setting:log_level[%s], ScreenOut[%t]", logLevel, ScreenOut)
 	return nil
 }
 
